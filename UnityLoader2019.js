@@ -3300,31 +3300,61 @@ var UnityLoader = UnityLoader || {
         t.complete()
     },
     processDataJob: function(e, t) {
-        var r = UnityLoader.Job.result(e, "downloadData")
-          , n = new DataView(r.buffer,r.byteOffset,r.byteLength)
-          , o = 0
-          , a = "UnityWebData1.0\0";
-        if (!String.fromCharCode.apply(null, r.subarray(o, o + a.length)) == a)
-            throw "unknown data format";
-        o += a.length;
-        var i = n.getUint32(o, !0);
-        for (o += 4; o < i; ) {
-            var s = n.getUint32(o, !0);
-            o += 4;
-            var d = n.getUint32(o, !0);
-            o += 4;
-            var l = n.getUint32(o, !0);
-            o += 4;
-            var u = String.fromCharCode.apply(null, r.subarray(o, o + l));
-            o += l;
-            for (var c = 0, f = u.indexOf("/", c) + 1; f > 0; c = f,
-            f = u.indexOf("/", c) + 1)
-                e.FS_createPath(u.substring(0, c), u.substring(c, f - 1), !0, !0);
-            e.FS_createDataFile(u, null, r.subarray(s, s + d), !0, !0, !0)
+    var r = UnityLoader.Job.result(e, "downloadData");
+    var n = new DataView(r.buffer, r.byteOffset, r.byteLength);
+    var o = 0;
+    var a = "UnityWebData1.0\0";
+
+    // Check if the header matches
+    if (String.fromCharCode.apply(null, r.subarray(o, o + a.length)) !== a) {
+        throw "unknown data format";
+    }
+
+    o += a.length; // Move the offset past the header
+
+    // Get the size of the data
+    var i = n.getUint32(o, true); // Use little-endian
+    console.log("Expected data size (i):", i);
+
+    // Check if the offset is within bounds before proceeding
+    if (o + 4 > n.byteLength) {
+        throw "Attempting to read beyond the DataView bounds after getting size";
+    }
+
+    o += 4; // Move past the size
+
+    // Loop to read the data
+    while (o < i) {
+        // Ensure we have enough data to read the next values
+        if (o + 12 > n.byteLength) {
+            throw "Attempting to read beyond the DataView bounds in the loop";
         }
-        e.removeRunDependency("processDataJob"),
-        t.complete()
-    },
+
+        var s = n.getUint32(o, true); // Read the first value
+        o += 4;
+        var d = n.getUint32(o, true); // Read the second value
+        o += 4;
+        var l = n.getUint32(o, true); // Read the third value
+        o += 4;
+
+        // Ensure we have enough data to read the string
+        if (o + l > r.length) {
+            throw "Attempting to read beyond the bounds of the original data";
+        }
+
+        var u = String.fromCharCode.apply(null, r.subarray(o, o + l)); // Read the string
+        o += l;
+
+        // Create the path and data file
+        for (var c = 0, f = u.indexOf("/", c) + 1; f > 0; c = f, f = u.indexOf("/", c) + 1) {
+            e.FS_createPath(u.substring(0, c), u.substring(c, f - 1), true, true);
+        }
+        e.FS_createDataFile(u, null, r.subarray(s, s + d), true, true, true);
+    }
+
+    e.removeRunDependency("processDataJob");
+    t.complete();
+},
     downloadJob: function(e, t) {
         var r = t.parameters.objParameters ? new UnityLoader.UnityCache.XMLHttpRequest(t.parameters.objParameters) : new XMLHttpRequest;
         r.open("GET", t.parameters.url),
